@@ -1,13 +1,25 @@
+/* Copyright 2014 Gagarine Yaikhom (MIT License) */
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#define NOT_USED  0 /* node is currently not used */
+#define LEAF_NODE 1 /* node contains a leaf node */
+#define A_MERGER  2 /* node contains a merged pair of root clusters */
+#define MAX_LABEL_LEN 16
+
+#define SINGLE_LINKAGE   's' /* choose minimum distance */
+#define COMPLETE_LINKAGE 'c' /* choose maximum distance */
+#define AVERAGE_LINKAGE  'a' /* choose average distance */
+
 typedef struct cluster_s cluster_t;
 typedef struct cluster_node_s cluster_node_t;
 typedef struct neighbour_s neighbour_t;
 typedef struct item_s item_t;
+
+float (*distance_fptr)(cluster_t *cluster, int index, int target);
 
 struct cluster_s {
     int num_items; /* number of items that was clustered */
@@ -16,10 +28,6 @@ struct cluster_s {
     cluster_node_t *nodes; /* leaf and merged clusters */
     float **distances; /* distane between leaf items */
 };
-
-#define NOT_USED  0 /* node is currently not used */
-#define LEAF_NODE 1 /* node contains a leaf node */
-#define A_MERGER  2 /* node contains a merged pair of root clusters */
 
 struct cluster_node_s {
     int type; /* type of the cluster node */
@@ -40,7 +48,7 @@ struct neighbour_s {
 
 struct item_s {
     float x, y; /* (x, y) coordinate of the input data point */
-    char *label; /* label of the input data point */
+    char label[MAX_LABEL_LEN]; /* label of the input data point */
 };
 
 cluster_node_t *add_leaf(cluster_t *cluster, const char *label) {
@@ -127,7 +135,7 @@ void insert_sorted(cluster_node_t *node, neighbour_t *neighbours) {
         insert_after(temp, neighbours);
 }
 
-float get_distance(cluster_t *cluster, int index, int target) {
+float single_linkage_distance(cluster_t *cluster, int index, int target) {
     /* if both are leaves, just use the distances matrix */
     if (index < cluster->num_items && target < cluster->num_items)
         return cluster->distances[index][target];
@@ -150,12 +158,57 @@ float get_distance(cluster_t *cluster, int index, int target) {
     }
 }
 
+float complete_linkage_distance(cluster_t *cluster, int index, int target) {
+    /* if both are leaves, just use the distances matrix */
+    if (index < cluster->num_items && target < cluster->num_items)
+        return cluster->distances[index][target];
+    else {
+        int i, j, m, n, *a, *b, x, y;
+        float max = -1; /* assuming distances are positive */
+        m = cluster->nodes[index].num_items;
+        a = cluster->nodes[index].items;
+        n = cluster->nodes[target].num_items;
+        b = cluster->nodes[target].items;
+        /* find parir-wise shortest distance between cluster leaves */
+        for (i = 0; i < m; ++i)
+            for (j = 0; j < n; ++j) {
+                x = a[i];
+                y = b[j];
+                if (cluster->distances[x][y] > max)
+                    max = cluster->distances[x][y];
+            }
+        return max;
+    }
+}
+
+float average_linkage_distance(cluster_t *cluster, int index, int target) {
+    /* if both are leaves, just use the distances matrix */
+    if (index < cluster->num_items && target < cluster->num_items)
+        return cluster->distances[index][target];
+    else {
+        int i, j, m, n, *a, *b, x, y;
+        float total = 0.0;
+        m = cluster->nodes[index].num_items;
+        a = cluster->nodes[index].items;
+        n = cluster->nodes[target].num_items;
+        b = cluster->nodes[target].items;
+        /* find parir-wise shortest distance between cluster leaves */
+        for (i = 0; i < m; ++i)
+            for (j = 0; j < n; ++j) {
+                x = a[i];
+                y = b[j];
+                total += cluster->distances[x][y];
+            }
+        return total / (m * n);
+    }
+}
+
 neighbour_t *add_neighbour(cluster_t *cluster, int index, int target) {
     neighbour_t *neighbour = (neighbour_t *)
     calloc(1, sizeof(neighbour_t));
     if (neighbour) {
         neighbour->target = target;
-        neighbour->distance = get_distance(cluster, index, target);
+        neighbour->distance = distance_fptr(cluster, index, target);
         cluster_node_t *node = &(cluster->nodes[index]);
         if (node->neighbours)
             insert_sorted(node, neighbour);
@@ -226,7 +279,7 @@ float **generate_distance_matrix(int num_items, const item_t items[]) {
     return matrix;
 }
 
-cluster_t *add_leaves(cluster_t *cluster, const item_t items[]) {
+cluster_t *add_leaves(cluster_t *cluster, item_t *items) {
     for (int i = 0; i < cluster->num_items; ++i) {
         if (add_leaf(cluster, items[i].label))
             update_neighbours(cluster, i);
@@ -235,6 +288,7 @@ cluster_t *add_leaves(cluster_t *cluster, const item_t items[]) {
             break;
         }
     }
+    free(items);
     return cluster;
 }
 
@@ -341,19 +395,21 @@ done:
     return cluster;
 }
 
-void print_cluster_node(cluster_node_t *node) {
+void print_cluster_node(cluster_t *cluster, int index) {
     neighbour_t *t;
-    if (node->label)
-        fprintf(stdout, "Leaf %s\n", node->label);
+    cluster_node_t node = cluster->nodes[index];
+    fprintf(stdout, "Node %d\n", index);
+    if (node.label)
+        fprintf(stdout, "\tLeaf: %s\n", node.label);
     else
-        fprintf(stdout, "Merged: %d %d\n", node->merged[0], node->merged[1]);
+        fprintf(stdout, "\tMerged: %d %d\n", node.merged[0], node.merged[1]);
     fprintf(stdout, "\tItems: ");
-    for (int i = 0; i < node->num_items; ++i)
-        fprintf(stdout, "%d, ", node->items[i]);
+    for (int i = 0; i < node.num_items; ++i)
+        fprintf(stdout, "%s, ", cluster->nodes[node.items[i]].label);
     fprintf(stdout, "\n\tNeighbours: ");
-    t = node->neighbours;
+    t = node.neighbours;
     while (t) {
-        fprintf(stdout, "(%d, %f), ", t->target, t->distance);
+        fprintf(stdout, "\n\t\t(%d, %f)", t->target, t->distance);
         t = t->next;
     }
     fprintf(stdout, "\n");
@@ -362,26 +418,57 @@ void print_cluster_node(cluster_node_t *node) {
 void print_cluster(cluster_t *cluster) {
     int i;
     for (i = 0; i < cluster->num_nodes; ++i)
-        print_cluster_node(&cluster->nodes[i]);
+        print_cluster_node(cluster, i);
+}
+
+int process_input(item_t **items, const char *fname) {
+    int count = 0;
+    FILE *f = fopen(fname, "r");
+    if (f) {
+        char linkage_type;
+        fscanf(f, "%c\n", &linkage_type);
+        switch (linkage_type) {
+            case AVERAGE_LINKAGE:
+                distance_fptr = average_linkage_distance;
+                break;
+            case COMPLETE_LINKAGE:
+                distance_fptr = complete_linkage_distance;
+                break;
+            case SINGLE_LINKAGE:
+            default: distance_fptr = single_linkage_distance;
+        }
+        
+        fscanf(f, "%d\n", &count);
+        if (count) {
+            item_t *temp = (item_t *) calloc(count, sizeof(item_t));
+            if (temp) {
+                for (int i = 0; i < count; ++i)
+                    if (!fscanf(f, "%[^|]| %f %f\n", temp[i].label,
+                                &(temp[i].x), &(temp[i].y))) {
+                        fprintf(stderr, "Failed to read input.\n");
+                        break;
+                    }
+                *items = temp;
+            } else
+                fprintf(stderr, "Failed to allocate items array.\n");
+        }
+    } else
+        fprintf(stderr, "Failed to open input file.\n");
+    return count;
 }
 
 int main(int argc, char **argv) {
-    item_t items[] = {
-        { .label = "A", .x = 1.0, .y = 1.0 },
-        { .label = "B", .x = 2.0, .y = 1.0 },
-        { .label = "C", .x = 2.0, .y = 2.0 },
-        { .label = "D", .x = 4.0, .y = 5.0 },
-        { .label = "E", .x = 5.0, .y = 4.0 },
-        { .label = "F", .x = 5.0, .y = 5.0 },
-        { .label = "G", .x = 5.0, .y = 6.0 },
-        { .label = "H", .x = 6.0, .y = 5.0 },
-        { .label = "I", .x = 9.0, .y = 9.0 },
-        { .label = "J", .x = 10.0, .y = 9.0 },
-        { .label = "K", .x = 10.0, .y = 10.0 },
-        { .label = "L", .x = 11.0, .y = 9.0 }
-    };
-    cluster_t *cluster = agglomerate(sizeof(items) / sizeof(items[0]), items);
-    print_cluster(cluster);
-    free_cluster(cluster);
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <input file>\n", argv[0]);
+        exit(1);
+    } else {
+        item_t *items = NULL;
+        int num_items = process_input(&items, argv[1]);
+        if (num_items) {
+            cluster_t *cluster = agglomerate(num_items, items);
+            print_cluster(cluster);
+            free_cluster(cluster);
+        }
+    }
     return 0;
 }
