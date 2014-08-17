@@ -363,7 +363,7 @@ cluster_t *merge_clusters(cluster_t *cluster) {
     return cluster;
 }
 
-cluster_t *agglomerate(int num_items, const item_t items[]) {
+cluster_t *agglomerate(int num_items, item_t *items) {
     cluster_t *cluster = (cluster_t *) calloc(1, sizeof(cluster_t));
     if (cluster) {
         cluster->nodes = (cluster_node_t *)
