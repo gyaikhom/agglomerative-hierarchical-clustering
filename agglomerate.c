@@ -15,11 +15,11 @@
 #define AVERAGE_LINKAGE  'a' /* choose average distance */
 
 #define alloc_mem(N, T) (T *) calloc(N, sizeof(T))
-#define alloc_fail(M) fprintf(stderr, \
-                               "Failed to allocate memory for %s.\n", M)
+#define alloc_fail(M) fprintf(stderr,                                   \
+                              "Failed to allocate memory for %s.\n", M)
 #define read_fail(M) fprintf(stderr, "Failed to read %s from file.\n", M)
-#define invalid_node(I) fprintf(stderr, \
-                                 "Invalid cluster node at index %d.\n", I)
+#define invalid_node(I) fprintf(stderr,                                 \
+                                "Invalid cluster node at index %d.\n", I)
 
 typedef struct cluster_s cluster_t;
 typedef struct cluster_node_s cluster_node_t;
@@ -437,38 +437,81 @@ int process_input(item_t **items, const char *fname) {
         int count = 0;
         FILE *f = fopen(fname, "r");
         if (f) {
-                char linkage_type;
-                if (fscanf(f, "%c\n", &linkage_type)) {
-                        switch (linkage_type) {
-                        case AVERAGE_LINKAGE:
-                                distance_fptr = average_linkage_distance;
-                                break;
-                        case COMPLETE_LINKAGE:
-                                distance_fptr = complete_linkage_distance;
-                                break;
-                        case SINGLE_LINKAGE:
-                        default: distance_fptr = single_linkage_distance;
-                        }
-                        count = read_items_from_file(items, f);
-                }else
-                        read_fail("linkage type"); 
+                count = read_items_from_file(items, f);
                 fclose(f);
         } else
                 fprintf(stderr, "Failed to open input file %s.\n", fname);
         return count;
 }
 
+int get_k_clusters(unsigned int n, cluster_t *cluster) {
+        if (n < 1)
+                return 0;
+        if (n > cluster->num_items) {
+                fprintf(stderr, "Only %d leaf items available.\n",
+                        cluster->num_items);
+                n = cluster->num_items;
+        }
+        int i;
+        for (i = 0; i < cluster->num_nodes; ++i)
+                cluster->nodes[i].is_root = 0;
+    
+        i = cluster->num_nodes;
+        for (int c = n; c; --c) {
+                cluster_node_t *node = &(cluster->nodes[--i]);
+                if (node->type == A_MERGER) {
+                        cluster->nodes[node->merged[0]].is_root = 1;
+                        cluster->nodes[node->merged[1]].is_root = 1;
+                }
+        }
+
+        while (n) {
+                cluster_node_t *node = &(cluster->nodes[i]);
+                if (node->is_root) {
+                        print_cluster_node(cluster, i);
+                        if (node->type == A_MERGER) {
+                                cluster->nodes[node->merged[0]].is_root = 0;
+                                cluster->nodes[node->merged[1]].is_root = 0;
+                        }
+                        --n;
+                }
+                --i;
+        }
+        return n;
+}
+
+void set_linkage(char linkage_type) {
+        switch (linkage_type) {
+        case AVERAGE_LINKAGE:
+                distance_fptr = average_linkage_distance;
+                break;
+        case COMPLETE_LINKAGE:
+                distance_fptr = complete_linkage_distance;
+                break;
+        case SINGLE_LINKAGE:
+        default: distance_fptr = single_linkage_distance;
+        }
+}
+
+
 int main(int argc, char **argv) {
-        if (argc != 2) {
-                fprintf(stderr, "Usage: %s <input file>\n", argv[0]);
+        if (argc != 4) {
+                fprintf(stderr, "Usage: %s <input file> <num clusters> "
+                        "<linkage type>\n", argv[0]);
                 exit(1);
         } else {
                 item_t *items = NULL;
                 int num_items = process_input(&items, argv[1]);
+                set_linkage(argv[3][0]);
                 if (num_items) {
                         cluster_t *cluster = agglomerate(num_items, items);
                         free(items);
+                        fprintf(stdout, "CLUSTER HIERARCHY\n--------------------\n");
                         print_cluster(cluster);
+            
+                        int k = atoi(argv[2]);
+                        fprintf(stdout, "\n\n%d CLUSTERS\n--------------------\n", k);
+                        get_k_clusters(k, cluster);
                         free_cluster(cluster);
                 }
         }
