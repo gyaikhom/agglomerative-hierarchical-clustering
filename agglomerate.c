@@ -444,40 +444,48 @@ int process_input(item_t **items, const char *fname) {
         return count;
 }
 
-int get_k_clusters(unsigned int n, cluster_t *cluster) {
-        if (n < 1)
-                return 0;
-        if (n > cluster->num_items) {
-                fprintf(stderr, "Only %d leaf items available.\n",
-                        cluster->num_items);
-                n = cluster->num_items;
-        }
-        int i;
-        for (i = 0; i < cluster->num_nodes; ++i)
-                cluster->nodes[i].is_root = 0;
-    
-        i = cluster->num_nodes;
+int mark_all_possible_roots(cluster_t *cluster, int n) {
+        int first_root_cluster = cluster->num_nodes;
         for (int c = n; c; --c) {
-                cluster_node_t *node = &(cluster->nodes[--i]);
+                cluster_node_t *node = &(cluster->nodes[--first_root_cluster]);
+                node->is_root = 1;
                 if (node->type == A_MERGER) {
                         cluster->nodes[node->merged[0]].is_root = 1;
                         cluster->nodes[node->merged[1]].is_root = 1;
                 }
         }
+        return first_root_cluster;
+}
 
-        while (n) {
-                cluster_node_t *node = &(cluster->nodes[i]);
+void print_k_roots(cluster_t *cluster, int k, int start_idx) {
+        while (k) {
+                cluster_node_t *node = &(cluster->nodes[start_idx]);
                 if (node->is_root) {
-                        print_cluster_node(cluster, i);
+                        print_cluster_node(cluster, start_idx);
                         if (node->type == A_MERGER) {
                                 cluster->nodes[node->merged[0]].is_root = 0;
                                 cluster->nodes[node->merged[1]].is_root = 0;
                         }
-                        --n;
+                        --k;
                 }
-                --i;
+                --start_idx;
         }
-        return n;
+}
+
+int get_k_clusters(unsigned int k, cluster_t *cluster) {
+        if (k < 1)
+                return 0;
+        if (k > cluster->num_items) {
+                fprintf(stderr, "Only %d leaf items available.\n",
+                        cluster->num_items);
+                k = cluster->num_items;
+        }
+        int i;
+        for (i = 0; i < cluster->num_nodes; ++i)
+                cluster->nodes[i].is_root = 0;
+        i = mark_all_possible_roots(cluster, k);
+        print_k_roots(cluster, k, i);
+        return k;
 }
 
 void set_linkage(char linkage_type) {
