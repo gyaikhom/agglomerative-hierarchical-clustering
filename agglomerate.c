@@ -60,12 +60,12 @@ struct item_s {
 
 cluster_node_t *add_leaf(cluster_t *cluster, const char *label) {
         cluster_node_t *t = &(cluster->nodes[cluster->num_nodes]);
-        int len = strlen(label);
+        int len = strlen(label) + 1;
         t->label = alloc_mem(len, char);
         if (t->label) {
                 t->items = alloc_mem(1, int);
                 if (t->items) {
-                        strncpy(t->label, label, sizeof(label));
+                        strncpy(t->label, label, len);
                         t->type = LEAF_NODE;
                         t->is_root = 1;
                         t->height = 0;
@@ -100,13 +100,20 @@ void free_cluster(cluster_t * cluster) {
                                 cluster_node_t node = cluster->nodes[i];
                                 if (node.label)
                                         free(node.label);
+                                if (node.merged)
+                                        free(node.merged);
+                                if (node.items)
+                                        free(node.items);
                                 if (node.neighbours)
                                         free_neighbours(node.neighbours);
                         }
                         free(cluster->nodes);
                 }
-                if (cluster->distances)
+                if (cluster->distances) {
+                        for (int i = 0; i < cluster->num_items; ++i)
+                                free(cluster->distances[i]);
                         free(cluster->distances);
+                }
                 free(cluster);
         }
 }
@@ -269,8 +276,31 @@ cluster_t *add_leaves(cluster_t *cluster, item_t *items) {
                         break;
                 }
         }
-        free(items);
         return cluster;
+}
+
+void print_cluster_node(cluster_t *cluster, int index) {
+        cluster_node_t node = cluster->nodes[index];
+        fprintf(stdout, "Node %d (height: %d)\n", index, node.height);
+        if (node.label)
+                fprintf(stdout, "\tLeaf: %s\n", node.label);
+        else
+                fprintf(stdout, "\tMerged: %d, %d\n",
+                        node.merged[0], node.merged[1]);
+        fprintf(stdout, "\tItems: ");
+        if (node.num_items > 0) {
+                fprintf(stdout, "%s", cluster->nodes[node.items[0]].label);
+                for (int i = 1; i < node.num_items; ++i)
+                        fprintf(stdout, ", %s",
+                                cluster->nodes[node.items[i]].label);
+        }
+        fprintf(stdout, "\n\tNeighbours: ");
+        neighbour_t *t = node.neighbours;
+        while (t) {
+                fprintf(stdout, "\n\t\t%2d: %5.3f", t->target, t->distance);
+                t = t->next;
+        }
+        fprintf(stdout, "\n");
 }
 
 cluster_node_t *merge(cluster_t *cluster, int first_idx) {
@@ -290,14 +320,14 @@ cluster_node_t *merge(cluster_t *cluster, int first_idx) {
                         node->type = A_MERGER;
                         node->merged[0] = first_idx;
                         node->merged[1] = second_idx;
-            
+
                         /* copy leaf indexes from merged clusters */
                         int j = 0;
                         for (int i = 0; i < first->num_items; ++i)
                                 node->items[j++] = first->items[i];
                         for (int i = 0; i < second->num_items; ++i)
                                 node->items[j++] = second->items[i];
-            
+         
                         /* update root clusters */
                         node->is_root = 1;
                         first->is_root = 0;
@@ -376,30 +406,6 @@ cleanup:
     
 done:
         return cluster;
-}
-
-void print_cluster_node(cluster_t *cluster, int index) {
-        cluster_node_t node = cluster->nodes[index];
-        fprintf(stdout, "Node %d (height: %d)\n", index, node.height);
-        if (node.label)
-                fprintf(stdout, "\tLeaf: %s\n", node.label);
-        else
-                fprintf(stdout, "\tMerged: %d, %d\n",
-                        node.merged[0], node.merged[1]);
-        fprintf(stdout, "\tItems: ");
-        if (node.num_items > 0) {
-                fprintf(stdout, "%s", cluster->nodes[node.items[0]].label);
-                for (int i = 1; i < node.num_items; ++i)
-                        fprintf(stdout, ", %s",
-                                cluster->nodes[node.items[i]].label);
-        }
-        fprintf(stdout, "\n\tNeighbours: ");
-        neighbour_t *t = node.neighbours;
-        while (t) {
-                fprintf(stdout, "\n\t\t%2d: %5.3f", t->target, t->distance);
-                t = t->next;
-        }
-        fprintf(stdout, "\n");
 }
 
 void print_cluster(cluster_t *cluster) {
@@ -514,6 +520,7 @@ int main(int argc, char **argv) {
                 if (num_items) {
                         cluster_t *cluster = agglomerate(num_items, items);
                         free(items);
+
                         fprintf(stdout, "CLUSTER HIERARCHY\n--------------------\n");
                         print_cluster(cluster);
             
