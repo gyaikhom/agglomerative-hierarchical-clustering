@@ -65,7 +65,7 @@ cluster_node_t *add_leaf(cluster_t *cluster, const char *label) {
         if (t->label) {
                 t->items = alloc_mem(1, int);
                 if (t->items) {
-                        strlcpy(t->label, label, sizeof(label));
+                        strncpy(t->label, label, sizeof(label));
                         t->type = LEAF_NODE;
                         t->is_root = 1;
                         t->height = 0;
