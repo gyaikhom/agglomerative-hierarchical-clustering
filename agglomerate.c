@@ -294,7 +294,7 @@ void print_cluster_node(cluster_t *cluster, int index) {
         cluster_node_t *node = &(cluster->nodes[index]);
         fprintf(stdout, "Node %d (height: %d)\n", index, node->height);
         if (node->label)
-                fprintf(stdout, "\tLeaf: %s\n", node->label);
+                fprintf(stdout, "\tLeaf: %s\n\t", node->label);
         else
                 fprintf(stdout, "\tMerged: %d, %d\n\t",
                         node->merged[0], node->merged[1]);
