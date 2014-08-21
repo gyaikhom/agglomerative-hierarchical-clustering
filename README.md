@@ -37,8 +37,7 @@ The input file contains the items to be clustered.
 For instance, the following is a valid input. It contains 12 data
 points, where each data point is referred to by its label and has
 coordinates in the two-dimensional [Euclidean
-plane](http://en.wikipedia.org/wiki/Euclidean_plane). Note that we can
-adapt this input format to accommodate \\\(n\\\)-dimensional vectors.
+plane](http://en.wikipedia.org/wiki/Euclidean_plane).
 
     12
     A| 1.0 1.0
