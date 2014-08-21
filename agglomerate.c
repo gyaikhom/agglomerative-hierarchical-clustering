@@ -1,4 +1,8 @@
-/* Copyright 2014 Gagarine Yaikhom (MIT License) */
+/**
+ * Copyright 2014 Gagarine Yaikhom (MIT License)
+ *
+ * Implements Hierarchical Agglomerative Clustering algorithm.
+ */
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
