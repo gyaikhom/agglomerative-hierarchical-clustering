@@ -279,23 +279,28 @@ cluster_t *add_leaves(cluster_t *cluster, item_t *items) {
         return cluster;
 }
 
-void print_cluster_node(cluster_t *cluster, int index) {
-        cluster_node_t node = cluster->nodes[index];
-        fprintf(stdout, "Node %d (height: %d)\n", index, node.height);
-        if (node.label)
-                fprintf(stdout, "\tLeaf: %s\n", node.label);
-        else
-                fprintf(stdout, "\tMerged: %d, %d\n",
-                        node.merged[0], node.merged[1]);
-        fprintf(stdout, "\tItems: ");
-        if (node.num_items > 0) {
-                fprintf(stdout, "%s", cluster->nodes[node.items[0]].label);
-                for (int i = 1; i < node.num_items; ++i)
+void print_cluster_items(cluster_t *cluster, cluster_node_t *node) {
+        fprintf(stdout, "Items: ");
+        if (node->num_items > 0) {
+                fprintf(stdout, "%s", cluster->nodes[node->items[0]].label);
+                for (int i = 1; i < node->num_items; ++i)
                         fprintf(stdout, ", %s",
-                                cluster->nodes[node.items[i]].label);
+                                cluster->nodes[node->items[i]].label);
         }
-        fprintf(stdout, "\n\tNeighbours: ");
-        neighbour_t *t = node.neighbours;
+        fprintf(stdout, "\n");
+}
+
+void print_cluster_node(cluster_t *cluster, int index) {
+        cluster_node_t *node = &(cluster->nodes[index]);
+        fprintf(stdout, "Node %d (height: %d)\n", index, node->height);
+        if (node->label)
+                fprintf(stdout, "\tLeaf: %s\n", node->label);
+        else
+                fprintf(stdout, "\tMerged: %d, %d\n\t",
+                        node->merged[0], node->merged[1]);
+        print_cluster_items(cluster, node);
+        fprintf(stdout, "\tNeighbours: ");
+        neighbour_t *t = node->neighbours;
         while (t) {
                 fprintf(stdout, "\n\t\t%2d: %5.3f", t->target, t->distance);
                 t = t->next;
@@ -303,13 +308,12 @@ void print_cluster_node(cluster_t *cluster, int index) {
         fprintf(stdout, "\n");
 }
 
-cluster_node_t *merge(cluster_t *cluster, int first_idx) {
+cluster_node_t *merge(cluster_t *cluster, int first_idx, int second_idx) {
         int new_idx = cluster->num_nodes;
         cluster_node_t *node = &(cluster->nodes[new_idx]);
         node->merged = alloc_mem(2, int);
         if (node->merged) {
                 cluster_node_t *first = &(cluster->nodes[first_idx]);
-                int second_idx = first->neighbours->target;
                 cluster_node_t *second = &(cluster->nodes[second_idx]);
         
                 /* expand and combine leaf items that was merged */
@@ -342,37 +346,51 @@ cluster_node_t *merge(cluster_t *cluster, int first_idx) {
                         cluster->num_nodes++;
                         cluster->num_clusters--;
                         update_neighbours(cluster, new_idx);
+                } else {
+                        alloc_fail("array of merged items");
+                        free(node->merged);
+                        node = NULL;
                 }
         } else {
-                alloc_fail("merged array of items");
+                alloc_fail("array of merged nodes");
                 node = NULL;
         }
         return node;
 }
 
-int find_clusters_to_merge(cluster_t *cluster) {
+int find_clusters_to_merge(cluster_t *cluster, int *first_idx, int *second_idx) {
         float best_distance = 0.0;
         int root_clusters_seen = 0;
         int j = cluster->num_nodes; /* traverse hierarchy top-down */
-        int best_candidate = -1;
+        *first_idx = -1;
         while (root_clusters_seen < cluster->num_clusters) {
                 cluster_node_t node = cluster->nodes[--j];
                 if (node.type == NOT_USED || !node.is_root)
                         continue;
                 ++root_clusters_seen;
-                if (node.neighbours)
-                        if (best_candidate == -1 ||
-                            node.neighbours->distance < best_distance) {
-                                best_candidate = j;
-                                best_distance = node.neighbours->distance;
+                neighbour_t *t = node.neighbours;
+                while (t) {
+                        if (cluster->nodes[t->target].is_root) {
+                                if (*first_idx == -1 ||
+                                    t->distance < best_distance) {
+                                        *first_idx = j;
+                                        *second_idx = t->target;
+                                        best_distance = t->distance;
+                                }
+                                break;
                         }
+                        t = t->next;
+                }
         }
-        return best_candidate;
+        return *first_idx;
 }
 
 cluster_t *merge_clusters(cluster_t *cluster) {
-        while (cluster->num_clusters > 1)
-                merge(cluster, find_clusters_to_merge(cluster));
+        int first, second;
+        while (cluster->num_clusters > 1) {
+                if (find_clusters_to_merge(cluster, &first, &second) != -1)
+                        merge(cluster, first, second);
+        }
         return cluster;
 }
 
@@ -467,7 +485,7 @@ void print_k_roots(cluster_t *cluster, int k, int start_idx) {
         while (k) {
                 cluster_node_t *node = &(cluster->nodes[start_idx]);
                 if (node->is_root) {
-                        print_cluster_node(cluster, start_idx);
+                        print_cluster_items(cluster, node);
                         if (node->type == A_MERGER) {
                                 cluster->nodes[node->merged[0]].is_root = 0;
                                 cluster->nodes[node->merged[1]].is_root = 0;
