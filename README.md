@@ -1,7 +1,7 @@
-# Hierarchical Agglomerative Clustering
+# Agglomerative Hierarchical Clustering
 
 Implements the
-[Hierarchical Agglomerative Clustering](http://en.wikipedia.org/wiki/Hierarchical_clustering)
+[Agglomerative Hierarchical Clustering](http://en.wikipedia.org/wiki/Hierarchical_clustering)
 algorithm.
 
 ## Usage
@@ -16,6 +16,7 @@ parameters on the command line:
     * `s` - Single linkage (default)
     * `c` - Complete linkage
     * `a` - Average linkage
+    * `t` - Centroid linkage
 
 For instance, the following is an example run:
 
@@ -55,11 +56,11 @@ plane](http://en.wikipedia.org/wiki/Euclidean_plane).
 
 After running the clustering algorithm, we get the following hierarchy:
 
-![Example hierarchical agglomerative clustering](hac.png)
+![Example agglomerative hierarchical clustering](ahc.png)
 
 The cluster hierarchy may be represented by the binary tree:
 
-![Example clustering as a binary tree](hac_tree.png)
+![Example clustering as a binary tree](ahc_tree.png)
 
 For further details, please visit my
-[homepage](http://yaikhom.com/2014/08/21/hierarchical-agglomerative-clustering.html).
+[homepage](http://yaikhom.com/2014/08/21/ agglomerative-hierarchical-clustering.html).
