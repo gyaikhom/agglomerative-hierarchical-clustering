@@ -472,17 +472,16 @@ int process_input(item_t **items, const char *fname) {
         return count;
 }
 
-int mark_all_possible_roots(cluster_t *cluster, int n) {
+int mark_all_possible_roots(cluster_t *cluster, int k) {
         int first_root_cluster = cluster->num_nodes;
-        for (int c = n; c; --c) {
+        while (--k) {
                 cluster_node_t *node = &(cluster->nodes[--first_root_cluster]);
-                node->is_root = 1;
                 if (node->type == A_MERGER) {
                         cluster->nodes[node->merged[0]].is_root = 1;
                         cluster->nodes[node->merged[1]].is_root = 1;
                 }
         }
-        return first_root_cluster;
+        return --first_root_cluster;
 }
 
 void print_k_roots(cluster_t *cluster, int k, int start_idx) {
@@ -490,10 +489,6 @@ void print_k_roots(cluster_t *cluster, int k, int start_idx) {
                 cluster_node_t *node = &(cluster->nodes[start_idx]);
                 if (node->is_root) {
                         print_cluster_items(cluster, node);
-                        if (node->type == A_MERGER) {
-                                cluster->nodes[node->merged[0]].is_root = 0;
-                                cluster->nodes[node->merged[1]].is_root = 0;
-                        }
                         --k;
                 }
                 --start_idx;
@@ -508,8 +503,8 @@ int get_k_clusters(unsigned int k, cluster_t *cluster) {
                         cluster->num_items);
                 k = cluster->num_items;
         }
-        int i;
-        for (i = 0; i < cluster->num_nodes; ++i)
+        int i, c;
+        for (i = 0, c = cluster->num_nodes - k + 1; i < c; ++i)
                 cluster->nodes[i].is_root = 0;
         i = mark_all_possible_roots(cluster, k);
         print_k_roots(cluster, k, i);
