@@ -14,9 +14,10 @@
 #define A_MERGER  2 /* node contains a merged pair of root clusters */
 #define MAX_LABEL_LEN 16
 
-#define SINGLE_LINKAGE   's' /* choose minimum distance */
-#define COMPLETE_LINKAGE 'c' /* choose maximum distance */
 #define AVERAGE_LINKAGE  'a' /* choose average distance */
+#define CENTROID_LINKAGE 't' /* choose distance between cluster centroids */
+#define COMPLETE_LINKAGE 'c' /* choose maximum distance */
+#define SINGLE_LINKAGE   's' /* choose minimum distance */
 
 #define alloc_mem(N, T) (T *) calloc(N, sizeof(T))
 #define alloc_fail(M) fprintf(stderr,                                   \
@@ -32,6 +33,10 @@ typedef struct item_s item_t;
 
 float (*distance_fptr)(float **, const int *, const int *, int, int);
 
+typedef struct coord_s {
+        float x, y;
+} coord_t;
+
 struct cluster_s {
         int num_items; /* number of items that was clustered */
         int num_clusters; /* current number of root clusters */
@@ -44,6 +49,7 @@ struct cluster_node_s {
         int type; /* type of the cluster node */
         int is_root; /* true if cluster hasn't merged with another */
         int height; /* height of node from the bottom */
+        coord_t centroid; /* centroid of this cluster */
         char *label; /* label of a leaf node */
         int *merged; /* indexes of root clusters merged */
         int num_items; /* number of leaf nodes inside new cluster */
@@ -58,18 +64,23 @@ struct neighbour_s {
 };
 
 struct item_s {
-        float x, y; /* (x, y) coordinate of the input data point */
+        coord_t coord; /* coordinate of the input data point */
         char label[MAX_LABEL_LEN]; /* label of the input data point */
 };
 
-cluster_node_t *add_leaf(cluster_t *cluster, const char *label) {
+float euclidean_distance(const coord_t *a, const coord_t *b) {
+        return sqrt(pow(a->x - b->x, 2) + pow(a->y - b->y, 2));
+}
+
+cluster_node_t *add_leaf(cluster_t *cluster, const item_t *item) {
         cluster_node_t *t = &(cluster->nodes[cluster->num_nodes]);
-        int len = strlen(label) + 1;
+        int len = strlen(item->label) + 1;
         t->label = alloc_mem(len, char);
         if (t->label) {
                 t->items = alloc_mem(1, int);
                 if (t->items) {
-                        strncpy(t->label, label, len);
+                        strncpy(t->label, item->label, len);
+                        t->centroid = item->coord;
                         t->type = LEAF_NODE;
                         t->is_root = 1;
                         t->height = 0;
@@ -153,8 +164,8 @@ void insert_sorted(cluster_node_t *node, neighbour_t *neighbours) {
                 insert_after(temp, neighbours);
 }
 
-float single_linkage_distance(float **distances, const int a[],
-                              const int b[], int m, int n) {
+float single_linkage(float **distances, const int a[],
+                     const int b[], int m, int n) {
         float min = FLT_MAX, d;
         for (int i = 0; i < m; ++i)
                 for (int j = 0; j < n; ++j) {
@@ -165,8 +176,8 @@ float single_linkage_distance(float **distances, const int a[],
         return min;
 }
 
-float complete_linkage_distance(float **distances, const int a[],
-                                const int b[], int m, int n) {
+float complete_linkage(float **distances, const int a[],
+                       const int b[], int m, int n) {
         float d, max = 0.0 /* assuming distances are positive */;
         for (int i = 0; i < m; ++i)
                 for (int j = 0; j < n; ++j) {
@@ -177,8 +188,8 @@ float complete_linkage_distance(float **distances, const int a[],
         return max;
 }
 
-float average_linkage_distance(float **distances, const int a[],
-                               const int b[], int m, int n) {
+float average_linkage(float **distances, const int a[],
+                      const int b[], int m, int n) {
         float total = 0.0;
         for (int i = 0; i < m; ++i)
                 for (int j = 0; j < n; ++j)
@@ -186,16 +197,25 @@ float average_linkage_distance(float **distances, const int a[],
         return total / (m * n);
 }
 
+float centroid_linkage(float **distances, const int a[],
+                       const int b[], int m, int n) {
+        return 0; /* empty function */
+}
+
 float get_distance(cluster_t *cluster, int index, int target) {
         /* if both are leaves, just use the distances matrix */
         if (index < cluster->num_items && target < cluster->num_items)
                 return cluster->distances[index][target];
-        else
-                return distance_fptr(cluster->distances,
-                                     cluster->nodes[index].items,
-                                     cluster->nodes[target].items,
-                                     cluster->nodes[index].num_items,
-                                     cluster->nodes[target].num_items);
+        else {
+                cluster_node_t *a = &(cluster->nodes[index]);
+                cluster_node_t *b = &(cluster->nodes[target]);
+                if (distance_fptr == centroid_linkage)
+                        return euclidean_distance(&(a->centroid),
+                                                  &(b->centroid));
+                else return distance_fptr(cluster->distances,
+                                          a->items, b->items,
+                                          a->num_items, b->num_items);
+        }
 }
 
 neighbour_t *add_neighbour(cluster_t *cluster, int index, int target) {
@@ -236,15 +256,13 @@ cluster_t *update_neighbours(cluster_t *cluster, int index) {
         return cluster;
 }
 
-float euclidean_distance(item_t a, item_t b) {
-        return sqrt(pow(a.x - b.x, 2) + pow(a.y - b.y, 2));
-}
-
 void fill_euclidean_distances(float **matrix, int num_items,
                               const item_t items[]) {
         for (int i = 0; i < num_items; ++i)
                 for (int j = 0; j < num_items; ++j) {
-                        matrix[i][j] = euclidean_distance(items[i], items[j]);
+                        matrix[i][j] =
+                                euclidean_distance(&(items[i].coord),
+                                                   &(items[j].coord));
                         matrix[j][i] = matrix[i][j];
                 }
 }
@@ -273,7 +291,7 @@ float **generate_distance_matrix(int num_items, const item_t items[]) {
 
 cluster_t *add_leaves(cluster_t *cluster, item_t *items) {
         for (int i = 0; i < cluster->num_items; ++i) {
-                if (add_leaf(cluster, items[i].label))
+                if (add_leaf(cluster, &items[i]))
                         update_neighbours(cluster, i);
                 else {
                         cluster = NULL;
@@ -297,7 +315,8 @@ void print_cluster_items(cluster_t *cluster, int index) {
 
 void print_cluster_node(cluster_t *cluster, int index) {
         cluster_node_t *node = &(cluster->nodes[index]);
-        fprintf(stdout, "Node %d (height: %d)\n", index, node->height);
+        fprintf(stdout, "Node %d - height: %d, centroid: (%5.3f, %5.3f)\n",
+                index, node->height, node->centroid.x, node->centroid.y);
         if (node->label)
                 fprintf(stdout, "\tLeaf: %s\n\t", node->label);
         else
@@ -318,36 +337,44 @@ cluster_node_t *merge(cluster_t *cluster, int first_idx, int second_idx) {
         cluster_node_t *node = &(cluster->nodes[new_idx]);
         node->merged = alloc_mem(2, int);
         if (node->merged) {
-                cluster_node_t *first = &(cluster->nodes[first_idx]);
-                cluster_node_t *second = &(cluster->nodes[second_idx]);
+                cluster_node_t *to_merge[2] = {
+                        &(cluster->nodes[first_idx]),
+                        &(cluster->nodes[second_idx])
+                };
         
                 /* expand and combine leaf items that was merged */
-                node->num_items = first->num_items + second->num_items;
+                node->num_items = to_merge[0]->num_items + to_merge[1]->num_items;
                 node->items = alloc_mem(node->num_items, int);
                 if (node->items) {
                         /* what was merged? */
                         node->type = A_MERGER;
+                        node->is_root = 1;
                         node->merged[0] = first_idx;
                         node->merged[1] = second_idx;
+                        node->height = -1;
 
                         /* copy leaf indexes from merged clusters */
-                        int j = 0;
-                        for (int i = 0; i < first->num_items; ++i)
-                                node->items[j++] = first->items[i];
-                        for (int i = 0; i < second->num_items; ++i)
-                                node->items[j++] = second->items[i];
-         
-                        /* update root clusters */
-                        node->is_root = 1;
-                        first->is_root = 0;
-                        second->is_root = 0;
-            
-                        /* set node height of new cluster */
-                        node->height = first->height;
-                        if (node->height < second->height)
-                                node->height = second->height;
+                        int k = 0, idx;
+                        coord_t centroid = { .x = 0.0, .y = 0.0 };
+                        for (int i = 0; i < 2; ++i) {
+                                cluster_node_t *t = to_merge[i];
+                                t->is_root = 0; /* no longer root after merger */
+                                if (node->height == -1 || node->height < t->height) 
+                                        node->height = t->height;
+                                for (int j = 0; j < t->num_items; ++j) {
+                                        idx = t->items[j];
+                                        node->items[k++] = idx;
+
+                                        /* for calculating centroid of new cluster */
+                                        centroid.x += cluster->nodes[idx].centroid.x;
+                                        centroid.y += cluster->nodes[idx].centroid.y;
+                                }
+                        }
+                        /* calculate centroid */
+                        node->centroid.x = centroid.x / k;
+                        node->centroid.y = centroid.y / k;
+
                         node->height++;
-            
                         cluster->num_nodes++;
                         cluster->num_clusters--;
                         update_neighbours(cluster, new_idx);
@@ -448,7 +475,7 @@ int read_items_from_file(item_t **items, FILE *f) {
                 if (t) {
                         for (int i = 0; i < count; ++i) {
                                 r = fscanf(f, "%[^|]| %f %f\n",
-                                           t[i].label, &(t[i].x), &(t[i].y));
+                                           t[i].label, &(t[i].coord.x), &(t[i].coord.y));
                                 if (r == 0) {
                                         read_fail("item line");
                                         free(t);
@@ -517,13 +544,16 @@ void get_k_clusters(cluster_t *cluster, int k) {
 void set_linkage(char linkage_type) {
         switch (linkage_type) {
         case AVERAGE_LINKAGE:
-                distance_fptr = average_linkage_distance;
+                distance_fptr = average_linkage;
                 break;
         case COMPLETE_LINKAGE:
-                distance_fptr = complete_linkage_distance;
+                distance_fptr = complete_linkage;
+                break;
+        case CENTROID_LINKAGE:
+                distance_fptr = centroid_linkage;
                 break;
         case SINGLE_LINKAGE:
-        default: distance_fptr = single_linkage_distance;
+        default: distance_fptr = single_linkage;
         }
 }
 
