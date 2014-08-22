@@ -283,7 +283,8 @@ cluster_t *add_leaves(cluster_t *cluster, item_t *items) {
         return cluster;
 }
 
-void print_cluster_items(cluster_t *cluster, cluster_node_t *node) {
+void print_cluster_items(cluster_t *cluster, int index) {
+        cluster_node_t *node = &(cluster->nodes[index]);
         fprintf(stdout, "Items: ");
         if (node->num_items > 0) {
                 fprintf(stdout, "%s", cluster->nodes[node->items[0]].label);
@@ -302,7 +303,7 @@ void print_cluster_node(cluster_t *cluster, int index) {
         else
                 fprintf(stdout, "\tMerged: %d, %d\n\t",
                         node->merged[0], node->merged[1]);
-        print_cluster_items(cluster, node);
+        print_cluster_items(cluster, index);
         fprintf(stdout, "\tNeighbours: ");
         neighbour_t *t = node->neighbours;
         while (t) {
@@ -476,6 +477,7 @@ int mark_all_possible_roots(cluster_t *cluster, int k) {
         int first_root_cluster = cluster->num_nodes;
         while (--k) {
                 cluster_node_t *node = &(cluster->nodes[--first_root_cluster]);
+                node->is_root = 1;
                 if (node->type == A_MERGER) {
                         cluster->nodes[node->merged[0]].is_root = 1;
                         cluster->nodes[node->merged[1]].is_root = 1;
@@ -484,31 +486,32 @@ int mark_all_possible_roots(cluster_t *cluster, int k) {
         return --first_root_cluster;
 }
 
-void print_k_roots(cluster_t *cluster, int k, int start_idx) {
-        while (k) {
-                cluster_node_t *node = &(cluster->nodes[start_idx]);
-                if (node->is_root) {
-                        print_cluster_items(cluster, node);
-                        --k;
-                }
-                --start_idx;
-        }
-}
-
-int get_k_clusters(unsigned int k, cluster_t *cluster) {
+void get_k_clusters(cluster_t *cluster, int k) {
         if (k < 1)
-                return 0;
-        if (k > cluster->num_items) {
-                fprintf(stderr, "Only %d leaf items available.\n",
-                        cluster->num_items);
+                return;
+        if (k > cluster->num_items)
                 k = cluster->num_items;
+
+        int i = cluster->num_nodes - 1;
+        int nodes_to_discard = cluster->num_nodes - k + 1;
+        while (k) {
+                if (i < nodes_to_discard) {
+                        print_cluster_items(cluster, i);
+                        --k;
+                } else {
+                        cluster_node_t *node = &(cluster->nodes[i]);
+                        if (node->type == A_MERGER) {
+                                for (int j = 0; j < 2; ++j) {
+                                        int t = node->merged[j];
+                                        if (t < nodes_to_discard) {
+                                                print_cluster_items(cluster, t);
+                                                --k;
+                                        }
+                                }
+                        }
+                }
+                --i;
         }
-        int i, c;
-        for (i = 0, c = cluster->num_nodes - k + 1; i < c; ++i)
-                cluster->nodes[i].is_root = 0;
-        i = mark_all_possible_roots(cluster, k);
-        print_k_roots(cluster, k, i);
-        return k;
 }
 
 void set_linkage(char linkage_type) {
@@ -523,7 +526,6 @@ void set_linkage(char linkage_type) {
         default: distance_fptr = single_linkage_distance;
         }
 }
-
 
 int main(int argc, char **argv) {
         if (argc != 4) {
@@ -543,7 +545,7 @@ int main(int argc, char **argv) {
             
                         int k = atoi(argv[2]);
                         fprintf(stdout, "\n\n%d CLUSTERS\n--------------------\n", k);
-                        get_k_clusters(k, cluster);
+                        get_k_clusters(cluster, k);
                         free_cluster(cluster);
                 }
         }
