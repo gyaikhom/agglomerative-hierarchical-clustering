@@ -171,8 +171,8 @@ void free_neighbours(neighbour_t *node) {
 void free_cluster(cluster_t * cluster) {
         if (cluster) {
                 if (cluster->nodes) {
-			for (int i = 0; i < cluster->num_nodes; ++i) {
-				cluster_node_t *node = &(cluster->nodes[i]);
+                        for (int i = 0; i < cluster->num_nodes; ++i) {
+                                cluster_node_t *node = &(cluster->nodes[i]);
                                 if (node->label)
                                         free(node->label);
                                 if (node->merged)
@@ -333,49 +333,58 @@ void print_cluster_node(cluster_t *cluster, int index) {
         fprintf(stdout, "\n");
 }
 
-cluster_node_t *merge(cluster_t *cluster, int first_idx, int second_idx) {
+void merge_items(cluster_t *cluster, cluster_node_t *node,
+                 cluster_node_t **to_merge) {
+        node->type = A_MERGER;
+        node->is_root = 1;
+        node->height = -1;
+
+        /* copy leaf indexes from merged clusters */
+        int k = 0, idx;
+        coord_t centroid = { .x = 0.0, .y = 0.0 };
+        for (int i = 0; i < 2; ++i) {
+                cluster_node_t *t = to_merge[i];
+                t->is_root = 0; /* no longer root: merged */
+                if (node->height == -1 ||
+                    node->height < t->height)
+                        node->height = t->height;
+                for (int j = 0; j < t->num_items; ++j) {
+                        idx = t->items[j];
+                        node->items[k++] = idx;
+
+                        /* to calculate cluster centroid */
+                        coord_t *temp = &(cluster->nodes[idx].centroid);
+                        centroid.x += temp->x;
+                        centroid.y += temp->y;
+                }
+        }
+        /* calculate centroid */
+        node->centroid.x = centroid.x / k;
+        node->centroid.y = centroid.y / k;
+        node->height++;
+}
+
+cluster_node_t *merge(cluster_t *cluster, int first, int second) {
         int new_idx = cluster->num_nodes;
         cluster_node_t *node = &(cluster->nodes[new_idx]);
         node->merged = alloc_mem(2, int);
         if (node->merged) {
                 cluster_node_t *to_merge[2] = {
-                        &(cluster->nodes[first_idx]),
-                        &(cluster->nodes[second_idx])
+                        &(cluster->nodes[first]),
+                        &(cluster->nodes[second])
                 };
-        
+
                 /* expand and combine leaf items that was merged */
-                node->num_items = to_merge[0]->num_items + to_merge[1]->num_items;
+                node->num_items = to_merge[0]->num_items +
+                        to_merge[1]->num_items;
                 node->items = alloc_mem(node->num_items, int);
                 if (node->items) {
                         /* what was merged? */
-                        node->type = A_MERGER;
-                        node->is_root = 1;
-                        node->merged[0] = first_idx;
-                        node->merged[1] = second_idx;
-                        node->height = -1;
+                        node->merged[0] = first;
+                        node->merged[1] = second;
 
-                        /* copy leaf indexes from merged clusters */
-                        int k = 0, idx;
-                        coord_t centroid = { .x = 0.0, .y = 0.0 };
-                        for (int i = 0; i < 2; ++i) {
-                                cluster_node_t *t = to_merge[i];
-                                t->is_root = 0; /* no longer root after merger */
-                                if (node->height == -1 || node->height < t->height) 
-                                        node->height = t->height;
-                                for (int j = 0; j < t->num_items; ++j) {
-                                        idx = t->items[j];
-                                        node->items[k++] = idx;
+                        merge_items(cluster, node, to_merge);
 
-                                        /* for calculating centroid of new cluster */
-                                        centroid.x += cluster->nodes[idx].centroid.x;
-                                        centroid.y += cluster->nodes[idx].centroid.y;
-                                }
-                        }
-                        /* calculate centroid */
-                        node->centroid.x = centroid.x / k;
-                        node->centroid.y = centroid.y / k;
-
-                        node->height++;
                         cluster->num_nodes++;
                         cluster->num_clusters--;
                         update_neighbours(cluster, new_idx);
@@ -391,11 +400,11 @@ cluster_node_t *merge(cluster_t *cluster, int first_idx, int second_idx) {
         return node;
 }
 
-int find_clusters_to_merge(cluster_t *cluster, int *first_idx, int *second_idx) {
+int find_clusters_to_merge(cluster_t *cluster, int *first, int *second) {
         float best_distance = 0.0;
         int root_clusters_seen = 0;
         int j = cluster->num_nodes; /* traverse hierarchy top-down */
-        *first_idx = -1;
+        *first = -1;
         while (root_clusters_seen < cluster->num_clusters) {
                 cluster_node_t *node = &(cluster->nodes[--j]);
                 if (node->type == NOT_USED || !node->is_root)
@@ -404,10 +413,10 @@ int find_clusters_to_merge(cluster_t *cluster, int *first_idx, int *second_idx) 
                 neighbour_t *t = node->neighbours;
                 while (t) {
                         if (cluster->nodes[t->target].is_root) {
-                                if (*first_idx == -1 ||
+                                if (*first == -1 ||
                                     t->distance < best_distance) {
-                                        *first_idx = j;
-                                        *second_idx = t->target;
+                                        *first = j;
+                                        *second = t->target;
                                         best_distance = t->distance;
                                 }
                                 break;
@@ -415,7 +424,7 @@ int find_clusters_to_merge(cluster_t *cluster, int *first_idx, int *second_idx) 
                         t = t->next;
                 }
         }
-        return *first_idx;
+        return *first;
 }
 
 cluster_t *merge_clusters(cluster_t *cluster) {
@@ -450,11 +459,11 @@ cluster_t *agglomerate(int num_items, item_t *items) {
         } else
                 alloc_fail("cluster");
         goto done;
-    
+
 cleanup:
         free_cluster(cluster);
         cluster = NULL;
-    
+
 done:
         return cluster;
 }
@@ -505,7 +514,7 @@ int read_items_from_file(item_t **items, FILE *f) {
                         for (int i = 0; i < count; ++i) {
                                 r = fscanf(f, "%[^|]| %10f %10f\n",
                                            t[i].label, &(t[i].coord.x),
-					   &(t[i].coord.y));
+                                           &(t[i].coord.y));
                                 if (r == 0) {
                                         read_fail("item line");
                                         free(t);
@@ -559,17 +568,17 @@ int main(int argc, char **argv) {
                         cluster_t *cluster = agglomerate(num_items, items);
                         free(items);
 
-			if (cluster) {
-				fprintf(stdout, "CLUSTER HIERARCHY\n"
-					"--------------------\n");
-				print_cluster(cluster);
-            
-				int k = atoi(argv[2]);
-				fprintf(stdout, "\n\n%d CLUSTERS\n"
-					"--------------------\n", k);
-				get_k_clusters(cluster, k);
-				free_cluster(cluster);
-			}
+                        if (cluster) {
+                                fprintf(stdout, "CLUSTER HIERARCHY\n"
+                                        "--------------------\n");
+                                print_cluster(cluster);
+
+                                int k = atoi(argv[2]);
+                                fprintf(stdout, "\n\n%d CLUSTERS\n"
+                                        "--------------------\n", k);
+                                get_k_clusters(cluster, k);
+                                free_cluster(cluster);
+                        }
                 }
         }
         return 0;
