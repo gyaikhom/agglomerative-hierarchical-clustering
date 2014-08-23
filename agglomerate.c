@@ -465,7 +465,7 @@ void print_cluster(cluster_t *cluster) {
 
 int read_items_from_file(item_t **items, FILE *f) {
         int count, r;
-        r = fscanf(f, "%d\n", &count);
+        r = fscanf(f, "%5d\n", &count);
         if (r == 0) {
                 read_fail("number of lines");
                 return 0;
@@ -474,7 +474,7 @@ int read_items_from_file(item_t **items, FILE *f) {
                 item_t *t = alloc_mem(count, item_t);
                 if (t) {
                         for (int i = 0; i < count; ++i) {
-                                r = fscanf(f, "%[^|]| %f %f\n",
+                                r = fscanf(f, "%[^|]| %10f %10f\n",
                                            t[i].label, &(t[i].coord.x), &(t[i].coord.y));
                                 if (r == 0) {
                                         read_fail("item line");
