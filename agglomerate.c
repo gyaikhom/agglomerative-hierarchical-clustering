@@ -500,19 +500,6 @@ int process_input(item_t **items, const char *fname) {
         return count;
 }
 
-int mark_all_possible_roots(cluster_t *cluster, int k) {
-        int first_root_cluster = cluster->num_nodes;
-        while (--k) {
-                cluster_node_t *node = &(cluster->nodes[--first_root_cluster]);
-                node->is_root = 1;
-                if (node->type == A_MERGER) {
-                        cluster->nodes[node->merged[0]].is_root = 1;
-                        cluster->nodes[node->merged[1]].is_root = 1;
-                }
-        }
-        return --first_root_cluster;
-}
-
 void get_k_clusters(cluster_t *cluster, int k) {
         if (k < 1)
                 return;
