@@ -72,96 +72,37 @@ float euclidean_distance(const coord_t *a, const coord_t *b) {
         return sqrt(pow(a->x - b->x, 2) + pow(a->y - b->y, 2));
 }
 
-cluster_node_t *add_leaf(cluster_t *cluster, const item_t *item) {
-        cluster_node_t *t = &(cluster->nodes[cluster->num_nodes]);
-        int len = strlen(item->label) + 1;
-        t->label = alloc_mem(len, char);
-        if (t->label) {
-                t->items = alloc_mem(1, int);
-                if (t->items) {
-                        strncpy(t->label, item->label, len);
-                        t->centroid = item->coord;
-                        t->type = LEAF_NODE;
-                        t->is_root = 1;
-                        t->height = 0;
-                        t->num_items = 1;
-                        t->items[0] = cluster->num_nodes++;
-                        cluster->num_clusters++;
-                } else {
-                        alloc_fail("node items");
-                        free(t->label);
-                        t = NULL;
+void fill_euclidean_distances(float **matrix, int num_items,
+                              const item_t items[]) {
+        for (int i = 0; i < num_items; ++i)
+                for (int j = 0; j < num_items; ++j) {
+                        matrix[i][j] =
+                                euclidean_distance(&(items[i].coord),
+                                                   &(items[j].coord));
+                        matrix[j][i] = matrix[i][j];
                 }
-        } else {
-                alloc_fail("node label");
-                t = NULL;
-        }
-        return t;
 }
 
-void free_neighbours(neighbour_t *node) {
-        neighbour_t *t;
-        while (node) {
-                t = node->next;
-                free(node);
-                node = t;
-        }
-}
-
-void free_cluster(cluster_t * cluster) {
-        if (cluster) {
-                if (cluster->nodes) {
-                        for (int i = 0; i < cluster->num_nodes; ++i) {
-                                cluster_node_t node = cluster->nodes[i];
-                                if (node.label)
-                                        free(node.label);
-                                if (node.merged)
-                                        free(node.merged);
-                                if (node.items)
-                                        free(node.items);
-                                if (node.neighbours)
-                                        free_neighbours(node.neighbours);
+float **generate_distance_matrix(int num_items, const item_t items[]) {
+        float **matrix = alloc_mem(num_items, float *);
+        if (matrix) {
+                for (int i = 0; i < num_items; ++i) {
+                        matrix[i] = alloc_mem(num_items, float);
+                        if (!matrix[i]) {
+                                alloc_fail("distance matrix row");
+                                num_items = i;
+                                for (i = 0; i < num_items; ++i)
+                                        free(matrix[i]);
+                                free(matrix);
+                                matrix = NULL;
+                                break;
                         }
-                        free(cluster->nodes);
                 }
-                if (cluster->distances) {
-                        for (int i = 0; i < cluster->num_items; ++i)
-                                free(cluster->distances[i]);
-                        free(cluster->distances);
-                }
-                free(cluster);
-        }
-}
-
-void insert_before(neighbour_t *current, neighbour_t *neighbours,
-                   cluster_node_t *node) {
-        neighbours->next = current;
-        if (current->prev) {
-                current->prev->next = neighbours;
-                neighbours->prev = current->prev;
+                if (matrix)
+                        fill_euclidean_distances(matrix, num_items, items);
         } else
-                node->neighbours = neighbours;
-        current->prev = neighbours;
-}
-
-void insert_after(neighbour_t *current, neighbour_t *neighbours) {
-        neighbours->prev = current;
-        current->next = neighbours;
-}
-
-void insert_sorted(cluster_node_t *node, neighbour_t *neighbours) {
-        neighbour_t *temp = node->neighbours;
-        while (temp->next) {
-                if (temp->distance >= neighbours->distance) {
-                        insert_before(temp, neighbours, node);
-                        return;
-                }
-                temp = temp->next;
-        }
-        if (neighbours->distance < temp->distance)
-                insert_before(temp, neighbours, node);
-        else
-                insert_after(temp, neighbours);
+                alloc_fail("distance matrix");
+        return matrix;
 }
 
 float single_linkage(float **distances, const int a[],
@@ -218,6 +159,72 @@ float get_distance(cluster_t *cluster, int index, int target) {
         }
 }
 
+void free_neighbours(neighbour_t *node) {
+        neighbour_t *t;
+        while (node) {
+                t = node->next;
+                free(node);
+                node = t;
+        }
+}
+
+void free_cluster(cluster_t * cluster) {
+        if (cluster) {
+                if (cluster->nodes) {
+			for (int i = 0; i < cluster->num_nodes; ++i) {
+				cluster_node_t *node = &(cluster->nodes[i]);
+                                if (node->label)
+                                        free(node->label);
+                                if (node->merged)
+                                        free(node->merged);
+                                if (node->items)
+                                        free(node->items);
+                                if (node->neighbours)
+                                        free_neighbours(node->neighbours);
+                        }
+                        free(cluster->nodes);
+                }
+                if (cluster->distances) {
+                        for (int i = 0; i < cluster->num_items; ++i)
+                                free(cluster->distances[i]);
+                        free(cluster->distances);
+                }
+                free(cluster);
+        }
+}
+
+void insert_before(neighbour_t *current, neighbour_t *neighbours,
+                   cluster_node_t *node) {
+        neighbours->next = current;
+        if (current->prev) {
+                current->prev->next = neighbours;
+                neighbours->prev = current->prev;
+        } else
+                node->neighbours = neighbours;
+        current->prev = neighbours;
+}
+
+void insert_after(neighbour_t *current, neighbour_t *neighbours) {
+        neighbours->prev = current;
+        current->next = neighbours;
+}
+
+void insert_sorted(cluster_node_t *node, neighbour_t *neighbours) {
+        neighbour_t *temp = node->neighbours;
+        while (temp->next) {
+                if (temp->distance >= neighbours->distance) {
+                        insert_before(temp, neighbours, node);
+                        return;
+                }
+                temp = temp->next;
+        }
+        if (neighbours->distance < temp->distance)
+                insert_before(temp, neighbours, node);
+        else
+                insert_after(temp, neighbours);
+}
+
+
 neighbour_t *add_neighbour(cluster_t *cluster, int index, int target) {
         neighbour_t *neighbour = alloc_mem(1, neighbour_t);
         if (neighbour) {
@@ -234,20 +241,20 @@ neighbour_t *add_neighbour(cluster_t *cluster, int index, int target) {
 }
 
 cluster_t *update_neighbours(cluster_t *cluster, int index) {
-        cluster_node_t node = cluster->nodes[index];
-        if (node.type == NOT_USED) {
+        cluster_node_t *node = &(cluster->nodes[index]);
+        if (node->type == NOT_USED) {
                 invalid_node(index);
                 cluster = NULL;
         } else {
                 int root_clusters_seen = 1, target = index;
                 while (root_clusters_seen < cluster->num_clusters) {
-                        cluster_node_t temp = cluster->nodes[--target];
-                        if (temp.type == NOT_USED) {
+                        cluster_node_t *temp = &(cluster->nodes[--target]);
+                        if (temp->type == NOT_USED) {
                                 invalid_node(index);
                                 cluster = NULL;
                                 break;
                         }
-                        if (temp.is_root) {
+                        if (temp->is_root) {
                                 ++root_clusters_seen;
                                 add_neighbour(cluster, index, target);
                         }
@@ -256,37 +263,31 @@ cluster_t *update_neighbours(cluster_t *cluster, int index) {
         return cluster;
 }
 
-void fill_euclidean_distances(float **matrix, int num_items,
-                              const item_t items[]) {
-        for (int i = 0; i < num_items; ++i)
-                for (int j = 0; j < num_items; ++j) {
-                        matrix[i][j] =
-                                euclidean_distance(&(items[i].coord),
-                                                   &(items[j].coord));
-                        matrix[j][i] = matrix[i][j];
+cluster_node_t *add_leaf(cluster_t *cluster, const item_t *item) {
+        cluster_node_t *t = &(cluster->nodes[cluster->num_nodes]);
+        int len = strlen(item->label) + 1;
+        t->label = alloc_mem(len, char);
+        if (t->label) {
+                t->items = alloc_mem(1, int);
+                if (t->items) {
+                        strncpy(t->label, item->label, len);
+                        t->centroid = item->coord;
+                        t->type = LEAF_NODE;
+                        t->is_root = 1;
+                        t->height = 0;
+                        t->num_items = 1;
+                        t->items[0] = cluster->num_nodes++;
+                        cluster->num_clusters++;
+                } else {
+                        alloc_fail("node items");
+                        free(t->label);
+                        t = NULL;
                 }
-}
-
-float **generate_distance_matrix(int num_items, const item_t items[]) {
-        float **matrix = alloc_mem(num_items, float *);
-        if (matrix) {
-                for (int i = 0; i < num_items; ++i) {
-                        matrix[i] = alloc_mem(num_items, float);
-                        if (!matrix[i]) {
-                                alloc_fail("distance matrix row");
-                                num_items = i;
-                                for (i = 0; i < num_items; ++i)
-                                        free(matrix[i]);
-                                free(matrix);
-                                matrix = NULL;
-                                break;
-                        }
-                }
-                if (matrix)
-                        fill_euclidean_distances(matrix, num_items, items);
-        } else
-                alloc_fail("distance matrix");
-        return matrix;
+        } else {
+                alloc_fail("node label");
+                t = NULL;
+        }
+        return t;
 }
 
 cluster_t *add_leaves(cluster_t *cluster, item_t *items) {
@@ -396,11 +397,11 @@ int find_clusters_to_merge(cluster_t *cluster, int *first_idx, int *second_idx) 
         int j = cluster->num_nodes; /* traverse hierarchy top-down */
         *first_idx = -1;
         while (root_clusters_seen < cluster->num_clusters) {
-                cluster_node_t node = cluster->nodes[--j];
-                if (node.type == NOT_USED || !node.is_root)
+                cluster_node_t *node = &(cluster->nodes[--j]);
+                if (node->type == NOT_USED || !node->is_root)
                         continue;
                 ++root_clusters_seen;
-                neighbour_t *t = node.neighbours;
+                neighbour_t *t = node->neighbours;
                 while (t) {
                         if (cluster->nodes[t->target].is_root) {
                                 if (*first_idx == -1 ||
@@ -458,48 +459,6 @@ done:
         return cluster;
 }
 
-void print_cluster(cluster_t *cluster) {
-        for (int i = 0; i < cluster->num_nodes; ++i)
-                print_cluster_node(cluster, i);
-}
-
-int read_items_from_file(item_t **items, FILE *f) {
-        int count, r;
-        r = fscanf(f, "%5d\n", &count);
-        if (r == 0) {
-                read_fail("number of lines");
-                return 0;
-        }
-        if (count) {
-                item_t *t = alloc_mem(count, item_t);
-                if (t) {
-                        for (int i = 0; i < count; ++i) {
-                                r = fscanf(f, "%[^|]| %10f %10f\n",
-                                           t[i].label, &(t[i].coord.x), &(t[i].coord.y));
-                                if (r == 0) {
-                                        read_fail("item line");
-                                        free(t);
-                                        return 0;
-                                }
-                        }
-                        *items = t;
-                } else
-                        alloc_fail("items array");
-        }
-        return count;
-}
-
-int process_input(item_t **items, const char *fname) {
-        int count = 0;
-        FILE *f = fopen(fname, "r");
-        if (f) {
-                count = read_items_from_file(items, f);
-                fclose(f);
-        } else
-                fprintf(stderr, "Failed to open input file %s.\n", fname);
-        return count;
-}
-
 void get_k_clusters(cluster_t *cluster, int k) {
         if (k < 1)
                 return;
@@ -528,6 +487,38 @@ void get_k_clusters(cluster_t *cluster, int k) {
         }
 }
 
+void print_cluster(cluster_t *cluster) {
+        for (int i = 0; i < cluster->num_nodes; ++i)
+                print_cluster_node(cluster, i);
+}
+
+int read_items_from_file(item_t **items, FILE *f) {
+        int count, r;
+        r = fscanf(f, "%5d\n", &count);
+        if (r == 0) {
+                read_fail("number of lines");
+                return 0;
+        }
+        if (count) {
+                item_t *t = alloc_mem(count, item_t);
+                if (t) {
+                        for (int i = 0; i < count; ++i) {
+                                r = fscanf(f, "%[^|]| %10f %10f\n",
+                                           t[i].label, &(t[i].coord.x),
+					   &(t[i].coord.y));
+                                if (r == 0) {
+                                        read_fail("item line");
+                                        free(t);
+                                        return 0;
+                                }
+                        }
+                        *items = t;
+                } else
+                        alloc_fail("items array");
+        }
+        return count;
+}
+
 void set_linkage(char linkage_type) {
         switch (linkage_type) {
         case AVERAGE_LINKAGE:
@@ -544,6 +535,17 @@ void set_linkage(char linkage_type) {
         }
 }
 
+int process_input(item_t **items, const char *fname) {
+        int count = 0;
+        FILE *f = fopen(fname, "r");
+        if (f) {
+                count = read_items_from_file(items, f);
+                fclose(f);
+        } else
+                fprintf(stderr, "Failed to open input file %s.\n", fname);
+        return count;
+}
+
 int main(int argc, char **argv) {
         if (argc != 4) {
                 fprintf(stderr, "Usage: %s <input file> <num clusters> "
@@ -557,13 +559,17 @@ int main(int argc, char **argv) {
                         cluster_t *cluster = agglomerate(num_items, items);
                         free(items);
 
-                        fprintf(stdout, "CLUSTER HIERARCHY\n--------------------\n");
-                        print_cluster(cluster);
+			if (cluster) {
+				fprintf(stdout, "CLUSTER HIERARCHY\n"
+					"--------------------\n");
+				print_cluster(cluster);
             
-                        int k = atoi(argv[2]);
-                        fprintf(stdout, "\n\n%d CLUSTERS\n--------------------\n", k);
-                        get_k_clusters(cluster, k);
-                        free_cluster(cluster);
+				int k = atoi(argv[2]);
+				fprintf(stdout, "\n\n%d CLUSTERS\n"
+					"--------------------\n", k);
+				get_k_clusters(cluster, k);
+				free_cluster(cluster);
+			}
                 }
         }
         return 0;
