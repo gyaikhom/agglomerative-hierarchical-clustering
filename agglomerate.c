@@ -68,12 +68,14 @@ struct item_s {
         char label[MAX_LABEL_LEN]; /* label of the input data point */
 };
 
-float euclidean_distance(const coord_t *a, const coord_t *b) {
+float euclidean_distance(const coord_t *a, const coord_t *b)
+{
         return sqrt(pow(a->x - b->x, 2) + pow(a->y - b->y, 2));
 }
 
 void fill_euclidean_distances(float **matrix, int num_items,
-                              const item_t items[]) {
+                              const item_t items[])
+{
         for (int i = 0; i < num_items; ++i)
                 for (int j = 0; j < num_items; ++j) {
                         matrix[i][j] =
@@ -83,7 +85,8 @@ void fill_euclidean_distances(float **matrix, int num_items,
                 }
 }
 
-float **generate_distance_matrix(int num_items, const item_t items[]) {
+float **generate_distance_matrix(int num_items, const item_t items[])
+{
         float **matrix = alloc_mem(num_items, float *);
         if (matrix) {
                 for (int i = 0; i < num_items; ++i) {
@@ -106,7 +109,8 @@ float **generate_distance_matrix(int num_items, const item_t items[]) {
 }
 
 float single_linkage(float **distances, const int a[],
-                     const int b[], int m, int n) {
+                     const int b[], int m, int n)
+{
         float min = FLT_MAX, d;
         for (int i = 0; i < m; ++i)
                 for (int j = 0; j < n; ++j) {
@@ -118,7 +122,8 @@ float single_linkage(float **distances, const int a[],
 }
 
 float complete_linkage(float **distances, const int a[],
-                       const int b[], int m, int n) {
+                       const int b[], int m, int n)
+{
         float d, max = 0.0 /* assuming distances are positive */;
         for (int i = 0; i < m; ++i)
                 for (int j = 0; j < n; ++j) {
@@ -130,7 +135,8 @@ float complete_linkage(float **distances, const int a[],
 }
 
 float average_linkage(float **distances, const int a[],
-                      const int b[], int m, int n) {
+                      const int b[], int m, int n)
+{
         float total = 0.0;
         for (int i = 0; i < m; ++i)
                 for (int j = 0; j < n; ++j)
@@ -139,11 +145,13 @@ float average_linkage(float **distances, const int a[],
 }
 
 float centroid_linkage(float **distances, const int a[],
-                       const int b[], int m, int n) {
+                       const int b[], int m, int n)
+{
         return 0; /* empty function */
 }
 
-float get_distance(cluster_t *cluster, int index, int target) {
+float get_distance(cluster_t *cluster, int index, int target)
+{
         /* if both are leaves, just use the distances matrix */
         if (index < cluster->num_items && target < cluster->num_items)
                 return cluster->distances[index][target];
@@ -159,7 +167,8 @@ float get_distance(cluster_t *cluster, int index, int target) {
         }
 }
 
-void free_neighbours(neighbour_t *node) {
+void free_neighbours(neighbour_t *node)
+{
         neighbour_t *t;
         while (node) {
                 t = node->next;
@@ -168,7 +177,8 @@ void free_neighbours(neighbour_t *node) {
         }
 }
 
-void free_cluster_nodes(cluster_t *cluster) {
+void free_cluster_nodes(cluster_t *cluster)
+{
         for (int i = 0; i < cluster->num_nodes; ++i) {
                 cluster_node_t *node = &(cluster->nodes[i]);
                 if (node->label)
@@ -183,7 +193,8 @@ void free_cluster_nodes(cluster_t *cluster) {
         free(cluster->nodes);
 }
 
-void free_cluster(cluster_t * cluster) {
+void free_cluster(cluster_t * cluster)
+{
         if (cluster) {
                 if (cluster->nodes)
                         free_cluster_nodes(cluster);
@@ -197,7 +208,8 @@ void free_cluster(cluster_t * cluster) {
 }
 
 void insert_before(neighbour_t *current, neighbour_t *neighbours,
-                   cluster_node_t *node) {
+                   cluster_node_t *node)
+{
         neighbours->next = current;
         if (current->prev) {
                 current->prev->next = neighbours;
@@ -207,12 +219,14 @@ void insert_before(neighbour_t *current, neighbour_t *neighbours,
         current->prev = neighbours;
 }
 
-void insert_after(neighbour_t *current, neighbour_t *neighbours) {
+void insert_after(neighbour_t *current, neighbour_t *neighbours)
+{
         neighbours->prev = current;
         current->next = neighbours;
 }
 
-void insert_sorted(cluster_node_t *node, neighbour_t *neighbours) {
+void insert_sorted(cluster_node_t *node, neighbour_t *neighbours)
+{
         neighbour_t *temp = node->neighbours;
         while (temp->next) {
                 if (temp->distance >= neighbours->distance) {
@@ -228,7 +242,8 @@ void insert_sorted(cluster_node_t *node, neighbour_t *neighbours) {
 }
 
 
-neighbour_t *add_neighbour(cluster_t *cluster, int index, int target) {
+neighbour_t *add_neighbour(cluster_t *cluster, int index, int target)
+{
         neighbour_t *neighbour = alloc_mem(1, neighbour_t);
         if (neighbour) {
                 neighbour->target = target;
@@ -243,7 +258,8 @@ neighbour_t *add_neighbour(cluster_t *cluster, int index, int target) {
         return neighbour;
 }
 
-cluster_t *update_neighbours(cluster_t *cluster, int index) {
+cluster_t *update_neighbours(cluster_t *cluster, int index)
+{
         cluster_node_t *node = &(cluster->nodes[index]);
         if (node->type == NOT_USED) {
                 invalid_node(index);
@@ -266,7 +282,8 @@ cluster_t *update_neighbours(cluster_t *cluster, int index) {
         return cluster;
 }
 
-cluster_node_t *add_leaf(cluster_t *cluster, const item_t *item) {
+cluster_node_t *add_leaf(cluster_t *cluster, const item_t *item)
+{
         cluster_node_t *t = &(cluster->nodes[cluster->num_nodes]);
         int len = strlen(item->label) + 1;
         t->label = alloc_mem(len, char);
@@ -293,7 +310,8 @@ cluster_node_t *add_leaf(cluster_t *cluster, const item_t *item) {
         return t;
 }
 
-cluster_t *add_leaves(cluster_t *cluster, item_t *items) {
+cluster_t *add_leaves(cluster_t *cluster, item_t *items)
+{
         for (int i = 0; i < cluster->num_items; ++i) {
                 if (add_leaf(cluster, &items[i]))
                         update_neighbours(cluster, i);
@@ -305,7 +323,8 @@ cluster_t *add_leaves(cluster_t *cluster, item_t *items) {
         return cluster;
 }
 
-void print_cluster_items(cluster_t *cluster, int index) {
+void print_cluster_items(cluster_t *cluster, int index)
+{
         cluster_node_t *node = &(cluster->nodes[index]);
         fprintf(stdout, "Items: ");
         if (node->num_items > 0) {
@@ -317,7 +336,8 @@ void print_cluster_items(cluster_t *cluster, int index) {
         fprintf(stdout, "\n");
 }
 
-void print_cluster_node(cluster_t *cluster, int index) {
+void print_cluster_node(cluster_t *cluster, int index)
+{
         cluster_node_t *node = &(cluster->nodes[index]);
         fprintf(stdout, "Node %d - height: %d, centroid: (%5.3f, %5.3f)\n",
                 index, node->height, node->centroid.x, node->centroid.y);
@@ -337,7 +357,8 @@ void print_cluster_node(cluster_t *cluster, int index) {
 }
 
 void merge_items(cluster_t *cluster, cluster_node_t *node,
-                 cluster_node_t **to_merge) {
+                 cluster_node_t **to_merge)
+{
         node->type = A_MERGER;
         node->is_root = 1;
         node->height = -1;
@@ -367,7 +388,8 @@ void merge_items(cluster_t *cluster, cluster_node_t *node,
         node->height++;
 }
 
-cluster_node_t *merge(cluster_t *cluster, int first, int second) {
+cluster_node_t *merge(cluster_t *cluster, int first, int second)
+{
         int new_idx = cluster->num_nodes;
         cluster_node_t *node = &(cluster->nodes[new_idx]);
         node->merged = alloc_mem(2, int);
@@ -407,7 +429,8 @@ void find_best_distance_neighbour(cluster_node_t *nodes,
                                   int node_idx,
                                   neighbour_t *neighbour,
                                   float *best_distance,
-                                  int *first, int *second) {
+                                  int *first, int *second)
+{
         while (neighbour) {
                 if (nodes[neighbour->target].is_root) {
                         if (*first == -1 ||
@@ -423,7 +446,8 @@ void find_best_distance_neighbour(cluster_node_t *nodes,
 }
 
 
-int find_clusters_to_merge(cluster_t *cluster, int *first, int *second) {
+int find_clusters_to_merge(cluster_t *cluster, int *first, int *second)
+{
         float best_distance = 0.0;
         int root_clusters_seen = 0;
         int j = cluster->num_nodes; /* traverse hierarchy top-down */
@@ -441,7 +465,8 @@ int find_clusters_to_merge(cluster_t *cluster, int *first, int *second) {
         return *first;
 }
 
-cluster_t *merge_clusters(cluster_t *cluster) {
+cluster_t *merge_clusters(cluster_t *cluster)
+{
         int first, second;
         while (cluster->num_clusters > 1) {
                 if (find_clusters_to_merge(cluster, &first, &second) != -1)
@@ -450,7 +475,8 @@ cluster_t *merge_clusters(cluster_t *cluster) {
         return cluster;
 }
 
-cluster_t *agglomerate(int num_items, item_t *items) {
+cluster_t *agglomerate(int num_items, item_t *items)
+{
         cluster_t *cluster = alloc_mem(1, cluster_t);
         if (cluster) {
                 cluster->nodes = alloc_mem(2 * num_items - 1, cluster_node_t);
@@ -482,7 +508,8 @@ done:
         return cluster;
 }
 
-int print_root_children(cluster_t *cluster, int i, int nodes_to_discard) {
+int print_root_children(cluster_t *cluster, int i, int nodes_to_discard)
+{
         cluster_node_t *node = &(cluster->nodes[i]);
         int roots_found = 0;
         if (node->type == A_MERGER) {
@@ -497,7 +524,8 @@ int print_root_children(cluster_t *cluster, int i, int nodes_to_discard) {
         return roots_found;
 }
 
-void get_k_clusters(cluster_t *cluster, int k) {
+void get_k_clusters(cluster_t *cluster, int k)
+{
         if (k < 1)
                 return;
         if (k > cluster->num_items)
@@ -518,12 +546,14 @@ void get_k_clusters(cluster_t *cluster, int k) {
         }
 }
 
-void print_cluster(cluster_t *cluster) {
+void print_cluster(cluster_t *cluster)
+{
         for (int i = 0; i < cluster->num_nodes; ++i)
                 print_cluster_node(cluster, i);
 }
 
-int read_items(int count, item_t *items, FILE *f) {
+int read_items(int count, item_t *items, FILE *f)
+{
         for (int i = 0; i < count; ++i) {
                 item_t *t = &(items[i]);
                 if (fscanf(f, "%[^|]| %10f %10f\n",
@@ -536,7 +566,8 @@ int read_items(int count, item_t *items, FILE *f) {
         return count;
 }
 
-int read_items_from_file(item_t **items, FILE *f) {
+int read_items_from_file(item_t **items, FILE *f)
+{
         int count, r;
         r = fscanf(f, "%5d\n", &count);
         if (r == 0) {
@@ -554,7 +585,8 @@ int read_items_from_file(item_t **items, FILE *f) {
         return count;
 }
 
-void set_linkage(char linkage_type) {
+void set_linkage(char linkage_type)
+{
         switch (linkage_type) {
         case AVERAGE_LINKAGE:
                 distance_fptr = average_linkage;
@@ -570,7 +602,8 @@ void set_linkage(char linkage_type) {
         }
 }
 
-int process_input(item_t **items, const char *fname) {
+int process_input(item_t **items, const char *fname)
+{
         int count = 0;
         FILE *f = fopen(fname, "r");
         if (f) {
@@ -581,7 +614,8 @@ int process_input(item_t **items, const char *fname) {
         return count;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
         if (argc != 4) {
                 fprintf(stderr, "Usage: %s <input file> <num clusters> "
                         "<linkage type>\n", argv[0]);
