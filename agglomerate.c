@@ -282,32 +282,37 @@ cluster_t *update_neighbours(cluster_t *cluster, int index)
         return cluster;
 }
 
+#define init_leaf(cluster, node, item, len)             \
+        do {                                            \
+                strncpy(node->label, item->label, len); \
+                node->centroid = item->coord;           \
+                node->type = LEAF_NODE;                 \
+                node->is_root = 1;                      \
+                node->height = 0;                       \
+                node->num_items = 1;                    \
+                node->items[0] = cluster->num_nodes++;  \
+        } while (0)                                     \
+
 cluster_node_t *add_leaf(cluster_t *cluster, const item_t *item)
 {
-        cluster_node_t *t = &(cluster->nodes[cluster->num_nodes]);
+        cluster_node_t *leaf = &(cluster->nodes[cluster->num_nodes]);
         int len = strlen(item->label) + 1;
-        t->label = alloc_mem(len, char);
-        if (t->label) {
-                t->items = alloc_mem(1, int);
-                if (t->items) {
-                        strncpy(t->label, item->label, len);
-                        t->centroid = item->coord;
-                        t->type = LEAF_NODE;
-                        t->is_root = 1;
-                        t->height = 0;
-                        t->num_items = 1;
-                        t->items[0] = cluster->num_nodes++;
+        leaf->label = alloc_mem(len, char);
+        if (leaf->label) {
+                leaf->items = alloc_mem(1, int);
+                if (leaf->items) {
+                        init_leaf(cluster, leaf, item, len);
                         cluster->num_clusters++;
                 } else {
                         alloc_fail("node items");
-                        free(t->label);
-                        t = NULL;
+                        free(leaf->label);
+                        leaf = NULL;
                 }
         } else {
                 alloc_fail("node label");
-                t = NULL;
+                leaf = NULL;
         }
-        return t;
+        return leaf;
 }
 
 cluster_t *add_leaves(cluster_t *cluster, item_t *items)
@@ -488,7 +493,7 @@ cluster_t *merge_clusters(cluster_t *cluster)
                         merge_clusters(cluster);                        \
                 else                                                    \
                         goto cleanup;                                   \
-        } while (0)
+        } while (0)                                                     \
 
 cluster_t *agglomerate(int num_items, item_t *items)
 {
