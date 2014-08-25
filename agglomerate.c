@@ -168,22 +168,25 @@ void free_neighbours(neighbour_t *node) {
         }
 }
 
+void free_cluster_nodes(cluster_t *cluster) {
+        for (int i = 0; i < cluster->num_nodes; ++i) {
+                cluster_node_t *node = &(cluster->nodes[i]);
+                if (node->label)
+                        free(node->label);
+                if (node->merged)
+                        free(node->merged);
+                if (node->items)
+                        free(node->items);
+                if (node->neighbours)
+                        free_neighbours(node->neighbours);
+        }
+        free(cluster->nodes);
+}
+
 void free_cluster(cluster_t * cluster) {
         if (cluster) {
-                if (cluster->nodes) {
-                        for (int i = 0; i < cluster->num_nodes; ++i) {
-                                cluster_node_t *node = &(cluster->nodes[i]);
-                                if (node->label)
-                                        free(node->label);
-                                if (node->merged)
-                                        free(node->merged);
-                                if (node->items)
-                                        free(node->items);
-                                if (node->neighbours)
-                                        free_neighbours(node->neighbours);
-                        }
-                        free(cluster->nodes);
-                }
+                if (cluster->nodes)
+                        free_cluster_nodes(cluster);
                 if (cluster->distances) {
                         for (int i = 0; i < cluster->num_items; ++i)
                                 free(cluster->distances[i]);
@@ -400,6 +403,26 @@ cluster_node_t *merge(cluster_t *cluster, int first, int second) {
         return node;
 }
 
+void find_best_distance_neighbour(cluster_node_t *nodes,
+                                  int node_idx,
+                                  neighbour_t *neighbour,
+                                  float *best_distance,
+                                  int *first, int *second) {
+        while (neighbour) {
+                if (nodes[neighbour->target].is_root) {
+                        if (*first == -1 ||
+                            neighbour->distance < *best_distance) {
+                                *first = node_idx;
+                                *second = neighbour->target;
+                                *best_distance = neighbour->distance;
+                        }
+                        break;
+                }
+                neighbour = neighbour->next;
+        }
+}
+
+
 int find_clusters_to_merge(cluster_t *cluster, int *first, int *second) {
         float best_distance = 0.0;
         int root_clusters_seen = 0;
@@ -410,19 +433,10 @@ int find_clusters_to_merge(cluster_t *cluster, int *first, int *second) {
                 if (node->type == NOT_USED || !node->is_root)
                         continue;
                 ++root_clusters_seen;
-                neighbour_t *t = node->neighbours;
-                while (t) {
-                        if (cluster->nodes[t->target].is_root) {
-                                if (*first == -1 ||
-                                    t->distance < best_distance) {
-                                        *first = j;
-                                        *second = t->target;
-                                        best_distance = t->distance;
-                                }
-                                break;
-                        }
-                        t = t->next;
-                }
+                find_best_distance_neighbour(cluster->nodes, j,
+                                             node->neighbours,
+                                             &best_distance,
+                                             first, second);
         }
         return *first;
 }
@@ -468,6 +482,21 @@ done:
         return cluster;
 }
 
+int print_root_children(cluster_t *cluster, int i, int nodes_to_discard) {
+        cluster_node_t *node = &(cluster->nodes[i]);
+        int roots_found = 0;
+        if (node->type == A_MERGER) {
+                for (int j = 0; j < 2; ++j) {
+                        int t = node->merged[j];
+                        if (t < nodes_to_discard) {
+                                print_cluster_items(cluster, t);
+                                ++roots_found;
+                        }
+                }
+        }
+        return roots_found;
+}
+
 void get_k_clusters(cluster_t *cluster, int k) {
         if (k < 1)
                 return;
@@ -475,23 +504,16 @@ void get_k_clusters(cluster_t *cluster, int k) {
                 k = cluster->num_items;
 
         int i = cluster->num_nodes - 1;
+        int roots_found = 0;
         int nodes_to_discard = cluster->num_nodes - k + 1;
         while (k) {
                 if (i < nodes_to_discard) {
                         print_cluster_items(cluster, i);
-                        --k;
-                } else {
-                        cluster_node_t *node = &(cluster->nodes[i]);
-                        if (node->type == A_MERGER) {
-                                for (int j = 0; j < 2; ++j) {
-                                        int t = node->merged[j];
-                                        if (t < nodes_to_discard) {
-                                                print_cluster_items(cluster, t);
-                                                --k;
-                                        }
-                                }
-                        }
-                }
+                        roots_found = 1;
+                } else
+                        roots_found = print_root_children(cluster, i,
+                                                          nodes_to_discard);
+                k -= roots_found;
                 --i;
         }
 }
@@ -499,6 +521,19 @@ void get_k_clusters(cluster_t *cluster, int k) {
 void print_cluster(cluster_t *cluster) {
         for (int i = 0; i < cluster->num_nodes; ++i)
                 print_cluster_node(cluster, i);
+}
+
+int read_items(int count, item_t *items, FILE *f) {
+        for (int i = 0; i < count; ++i) {
+                item_t *t = &(items[i]);
+                if (fscanf(f, "%[^|]| %10f %10f\n",
+                           t->label, &(t->coord.x),
+                           &(t->coord.y)))
+                        continue;
+                read_fail("item line");
+                return i;
+        }
+        return count;
 }
 
 int read_items_from_file(item_t **items, FILE *f) {
@@ -509,19 +544,10 @@ int read_items_from_file(item_t **items, FILE *f) {
                 return 0;
         }
         if (count) {
-                item_t *t = alloc_mem(count, item_t);
-                if (t) {
-                        for (int i = 0; i < count; ++i) {
-                                r = fscanf(f, "%[^|]| %10f %10f\n",
-                                           t[i].label, &(t[i].coord.x),
-                                           &(t[i].coord.y));
-                                if (r == 0) {
-                                        read_fail("item line");
-                                        free(t);
-                                        return 0;
-                                }
-                        }
-                        *items = t;
+                *items = alloc_mem(count, item_t);
+                if (*items) {
+                        if (read_items(count, *items, f) != count)
+                                free(items);
                 } else
                         alloc_fail("items array");
         }
