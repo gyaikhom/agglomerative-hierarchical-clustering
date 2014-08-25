@@ -393,6 +393,23 @@ void merge_items(cluster_t *cluster, cluster_node_t *node,
         node->height++;
 }
 
+#define merge_to_one(cluster, to_merge, node, node_idx)         \
+        do {                                                    \
+                node->num_items = to_merge[0]->num_items +      \
+                        to_merge[1]->num_items;                 \
+                node->items = alloc_mem(node->num_items, int);  \
+                if (node->items) {                              \
+                        merge_items(cluster, node, to_merge);   \
+                        cluster->num_nodes++;                   \
+                        cluster->num_clusters--;                \
+                        update_neighbours(cluster, node_idx);   \
+                } else {                                        \
+                        alloc_fail("array of merged items");    \
+                        free(node->merged);                     \
+                        node = NULL;                            \
+                }                                               \
+        } while(0)                                              \
+
 cluster_node_t *merge(cluster_t *cluster, int first, int second)
 {
         int new_idx = cluster->num_nodes;
@@ -403,26 +420,9 @@ cluster_node_t *merge(cluster_t *cluster, int first, int second)
                         &(cluster->nodes[first]),
                         &(cluster->nodes[second])
                 };
-
-                /* expand and combine leaf items that was merged */
-                node->num_items = to_merge[0]->num_items +
-                        to_merge[1]->num_items;
-                node->items = alloc_mem(node->num_items, int);
-                if (node->items) {
-                        /* what was merged? */
-                        node->merged[0] = first;
-                        node->merged[1] = second;
-
-                        merge_items(cluster, node, to_merge);
-
-                        cluster->num_nodes++;
-                        cluster->num_clusters--;
-                        update_neighbours(cluster, new_idx);
-                } else {
-                        alloc_fail("array of merged items");
-                        free(node->merged);
-                        node = NULL;
-                }
+                node->merged[0] = first;
+                node->merged[1] = second;
+                merge_to_one(cluster, to_merge, node, new_idx);
         } else {
                 alloc_fail("array of merged nodes");
                 node = NULL;
