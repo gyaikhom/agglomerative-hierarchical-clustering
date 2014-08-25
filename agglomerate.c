@@ -315,6 +315,8 @@ cluster_node_t *add_leaf(cluster_t *cluster, const item_t *item)
         return leaf;
 }
 
+#undef init_leaf
+
 cluster_t *add_leaves(cluster_t *cluster, item_t *items)
 {
         for (int i = 0; i < cluster->num_items; ++i) {
@@ -430,6 +432,8 @@ cluster_node_t *merge(cluster_t *cluster, int first, int second)
         return node;
 }
 
+#undef merge_to_one
+
 void find_best_distance_neighbour(cluster_node_t *nodes,
                                   int node_idx,
                                   neighbour_t *neighbour,
@@ -517,6 +521,8 @@ cleanup:
 done:
         return cluster;
 }
+
+#undef init_cluster
 
 int print_root_children(cluster_t *cluster, int i, int nodes_to_discard)
 {
