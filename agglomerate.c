@@ -475,24 +475,29 @@ cluster_t *merge_clusters(cluster_t *cluster)
         return cluster;
 }
 
+#define init_cluster(cluster, num_items, items)                         \
+        do {                                                            \
+                cluster->distances =                                    \
+                        generate_distance_matrix(num_items, items);     \
+                if (!cluster->distances)                                \
+                        goto cleanup;                                   \
+                cluster->num_items = num_items;                         \
+                cluster->num_nodes = 0;                                 \
+                cluster->num_clusters = 0;                              \
+                if (add_leaves(cluster, items))                         \
+                        merge_clusters(cluster);                        \
+                else                                                    \
+                        goto cleanup;                                   \
+        } while (0)
+
 cluster_t *agglomerate(int num_items, item_t *items)
 {
         cluster_t *cluster = alloc_mem(1, cluster_t);
         if (cluster) {
                 cluster->nodes = alloc_mem(2 * num_items - 1, cluster_node_t);
-                if (cluster->nodes) {
-                        cluster->distances =
-                                generate_distance_matrix(num_items, items);
-                        if (!cluster->distances)
-                                goto cleanup;
-                        cluster->num_items = num_items;
-                        cluster->num_nodes = 0;
-                        cluster->num_clusters = 0;
-                        if (add_leaves(cluster, items))
-                                merge_clusters(cluster);
-                        else
-                                goto cleanup;
-                } else {
+                if (cluster->nodes)
+                        init_cluster(cluster, num_items, items);
+                else {
                         alloc_fail("cluster nodes");
                         goto cleanup;
                 }
