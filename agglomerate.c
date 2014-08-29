@@ -382,12 +382,9 @@ void merge_items(cluster_t *cluster, cluster_node_t *node,
                 for (int j = 0; j < t->num_items; ++j) {
                         idx = t->items[j];
                         node->items[k++] = idx;
-
-                        /* to calculate cluster centroid */
-                        coord_t *temp = &(cluster->nodes[idx].centroid);
-                        centroid.x += temp->x;
-                        centroid.y += temp->y;
                 }
+                centroid.x += t->num_items * t->centroid.x;
+                centroid.y += t->num_items * t->centroid.y;
         }
         /* calculate centroid */
         node->centroid.x = centroid.x / k;
