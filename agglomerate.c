@@ -76,13 +76,14 @@ float euclidean_distance(const coord_t *a, const coord_t *b)
 void fill_euclidean_distances(float **matrix, int num_items,
                               const item_t items[])
 {
-        for (int i = 0; i < num_items; ++i)
-                for (int j = 0; j < num_items; ++j) {
-                        matrix[i][j] =
+        for (int i = 0; i < num_items; ++i) {
+                for (int j = 0; j < i; ++j) {
+                        matrix[j][i] = matrix[i][j] =
                                 euclidean_distance(&(items[i].coord),
                                                    &(items[j].coord));
-                        matrix[j][i] = matrix[i][j];
                 }
+                matrix[i][i] = 0.0;
+        }
 }
 
 float **generate_distance_matrix(int num_items, const item_t items[])
