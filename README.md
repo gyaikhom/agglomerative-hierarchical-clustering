@@ -61,6 +61,3 @@ After running the clustering algorithm, we get the following hierarchy:
 The cluster hierarchy may be represented by the binary tree:
 
 ![Example clustering as a binary tree](ahc_tree.png)
-
-For further details, please visit my
-[homepage](http://yaikhom.com/2014/08/21/ agglomerative-hierarchical-clustering.html).
